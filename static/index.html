@@ -1,0 +1,1663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIMIR //</title>
+<script>
+  // Applied before the rest of the page renders, so switching to light
+  // mode doesn't show a flash of the dark theme first on every load.
+  (function () {
+    try {
+      var saved = localStorage.getItem("mimir-theme");
+      if (saved === "light") document.documentElement.setAttribute("data-theme", "light");
+    } catch (e) {}
+  })();
+</script>
+<style>
+  :root {
+    --bg: #0a0813;
+    --panel: #120e1c;
+    --panel-2: #171224;
+    --line: #2a1e3d;
+    --text: #c9f2c9;
+    --text-dim: #6f9273;
+    --green: #39ff6a;
+    --amber: #ffb020;
+    --cyan: #00f0ff;
+    --magenta: #ff2ec4;
+    --red: #ff5555;
+    --grad-1: rgba(0,240,255,0.07);
+    --grad-2: rgba(255,46,196,0.06);
+    --tutorial-glow: 0 0 0 6px rgba(57,255,106,0.25), 0 0 26px rgba(57,255,106,0.55);
+    --mono: ui-monospace, "JetBrains Mono", "Fira Code", "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  /* Light mode: same palette structure, but green in particular is toned
+     way down from the neon dark-mode value — #39ff6a on white is harsh
+     and low-contrast; this uses a deeper, more muted green that still
+     reads clearly as "the accent color" without being hard to look at.
+     Cyan/magenta are similarly capped less saturated than the dark-mode
+     neon values so they stay legible on a white background. */
+  [data-theme="light"] {
+    --bg: #f4f7f4;
+    --panel: #ffffff;
+    --panel-2: #eef2ee;
+    --line: #d3ddd3;
+    --text: #16261a;
+    --text-dim: #5c6f5f;
+    --green: #a5480a;
+    --amber: #7a6100;
+    --cyan: #0086a3;
+    --magenta: #b0179c;
+    --red: #c73737;
+    --grad-1: rgba(165,72,10,0.05);
+    --grad-2: rgba(156,66,8,0.04);
+    --tutorial-glow: 0 0 0 6px rgba(165,72,10,0.2), 0 0 22px rgba(165,72,10,0.4);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse at top left, var(--grad-1), transparent 45%),
+      radial-gradient(ellipse at bottom right, var(--grad-2), transparent 50%);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    min-height: 100vh;
+    transition: background-color 0.2s, color 0.2s;
+  }
+  /* Faint CRT scanline texture over the whole app — a fixed, pointer-events:
+     none overlay so it never intercepts clicks or affects layout. Dropped
+     entirely in light mode, where it reads as dirt on the screen rather
+     than a retro-terminal effect. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0.09) 0px,
+      rgba(0,0,0,0.09) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  }
+  [data-theme="light"] body::before { display: none; }
+  a { color: var(--cyan); }
+
+  header {
+    padding: 22px 28px 14px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  /* Below 900px the top-nav (4 tabs + theme/settings buttons) is wider
+     than what's left after the logo, and header had no flex-wrap — on a
+     390px phone this pushed the nav off the right edge and forced the
+     whole page to scroll horizontally. flex-wrap alone fixes the overflow
+     (the nav drops to its own line under the logo); this also lets the
+     nav buttons shrink to fit rather than each holding its desktop width. */
+  @media (max-width: 900px) {
+    .top-nav { flex-wrap: wrap; height: auto; }
+    .top-tab { padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  }
+  .logo-ascii {
+    margin: 0;
+    width: fit-content;
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1.15;
+    font-weight: 700;
+    background: linear-gradient(90deg, #00f0ff, #ff2ec4, #ffd166, #39ff6a, #00f0ff);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 8px rgba(0,240,255,0.28)) drop-shadow(0 0 12px rgba(0,240,255,0.14));
+    white-space: pre;
+    animation: logo-rgb-shift 24s linear infinite, logo-glow-shift 24s linear infinite;
+  }
+  /* background-size is 3x the element, so one full 0%->300% sweep of
+     logo-rgb-shift actually scrolls the 5-stop gradient past three
+     times (three "laps") — slowed way down from the old 7s (a lap
+     every ~2.3s, reads as flashing) to 24s (a lap every 8s, reads as a
+     slow wash). logo-glow-shift below is kept at the exact same 24s
+     duration and walks through the same four colors at the same lap
+     boundaries (every 8.33% = one color), so the glow is never just
+     "on" — it's always the colour the text is currently showing, not
+     a fixed cyan/magenta pair. */
+  @keyframes logo-rgb-shift {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 300% 50%; }
+  }
+  @keyframes logo-glow-shift {
+    0%, 33.33%, 66.67%, 100% { filter: drop-shadow(0 0 8px rgba(0,240,255,0.28)) drop-shadow(0 0 12px rgba(0,240,255,0.14)); }
+    8.33%, 41.67%, 75% { filter: drop-shadow(0 0 8px rgba(255,46,196,0.28)) drop-shadow(0 0 12px rgba(255,46,196,0.14)); }
+    16.67%, 50%, 83.33% { filter: drop-shadow(0 0 8px rgba(255,209,102,0.28)) drop-shadow(0 0 12px rgba(255,209,102,0.14)); }
+    25%, 58.33%, 91.67% { filter: drop-shadow(0 0 8px rgba(57,255,106,0.28)) drop-shadow(0 0 12px rgba(57,255,106,0.14)); }
+  }
+  /* The neon glow reads as noise, not style, once the background is
+     white — dropped entirely in light mode rather than tuned down, and
+     logo-glow-shift (which only ever changes that same filter) is
+     dropped right along with it; the RGB gradient shift still plays,
+     since that part reads fine on a light background. */
+  [data-theme="light"] .logo-ascii { filter: none; animation: logo-rgb-shift 24s linear infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .logo-ascii { animation: none; }
+  }
+  @media (max-width: 900px) {
+    .logo-ascii { font-size: 9px; }
+  }
+  .logo-tag {
+    color: var(--text-dim);
+    font-size: 12px;
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+  .tagline {
+    color: var(--text-dim);
+    font-size: 12px;
+    margin-top: 4px;
+    letter-spacing: 0.5px;
+    max-width: 640px;
+  }
+  .gear-btn {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    padding: 8px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .gear-btn:hover { color: var(--green); border-color: var(--green); }
+
+  .top-nav {
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    overflow: hidden;
+    height: 34px;
+  }
+  .top-tab {
+    padding: 0 18px;
+    background: var(--panel);
+    border: none;
+    border-right: 1px solid var(--line);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+  }
+  .top-tab:last-child { border-right: none; }
+  .top-tab.active { background: rgba(57,255,106,0.1); color: var(--green); }
+  .top-tab:hover:not(.active) { color: var(--text); }
+
+  .layout, .scans-layout {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 0;
+    min-height: calc(100vh - 90px);
+  }
+  /* No responsive design existed anywhere in this file before this —
+     confirmed directly: below this app's fixed 340px sidebar width,
+     the "1fr" main content column had nowhere to go but a near-unusable
+     sliver (as little as ~50px wide on a typical phone viewport,
+     forcing every word onto its own line throughout the whole report/
+     company/scan views). This stacks the sidebar above the main
+     content instead below a reasonable breakpoint, so the main content
+     gets the full viewport width rather than whatever's left over.
+     This makes the app usable on a narrow screen, not polished for
+     one — tables/grids inside the main content still aren't
+     reflowed for mobile, which is a much larger, separate piece of
+     work than this fix. */
+  @media (max-width: 900px) {
+    .layout, .scans-layout {
+      grid-template-columns: 1fr;
+    }
+    .sidebar {
+      border-right: none;
+      border-bottom: 1px solid var(--line);
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+  }
+  .sidebar {
+    border-right: 1px solid var(--line);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .main {
+    padding: 20px 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .panel-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    padding: 10px 14px 10px 28px;
+    border-bottom: 1px solid var(--line);
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+  }
+  /* Every panel is collapsible — click its title (anywhere that isn't a
+     button/link/input inside it) to fold the body away, click again to
+     reopen. State persists per browser via localStorage, keyed by the
+     title's own text, so "collapse Why each tool ran" stays collapsed
+     across reloads and across which scan you're looking at. */
+  .panel-title::before {
+    content: "▾";
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 9px;
+    color: var(--text-dim);
+    transition: transform 0.15s ease;
+  }
+  .panel-title:hover::before { color: var(--cyan); }
+  .panel.collapsed .panel-title { border-bottom: none; }
+  .panel.collapsed .panel-title::before { transform: translateY(-50%) rotate(-90deg); }
+  .panel.collapsed > *:not(.panel-title) { display: none !important; }
+
+  .tld-group-heading {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--cyan);
+    margin: 10px 0 2px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+  }
+  .tld-group-heading:first-of-type { border-top: none; padding-top: 0; }
+
+  .field label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .field input, .field select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 10px 12px;
+    border-radius: 3px;
+    outline: none;
+  }
+  .field input:focus, .field select:focus { border-color: var(--green); }
+
+  .tabs {
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 9px 6px;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    background: var(--panel-2);
+    border: none;
+    font-family: var(--mono);
+  }
+  .tab.active.fast { background: rgba(57,255,106,0.12); color: var(--green); }
+  .tab.active.full { background: rgba(255,176,32,0.12); color: var(--amber); }
+  .tab-desc { font-size: 11px; color: var(--text-dim); line-height: 1.5; margin-top: 8px; }
+  .tool-pill {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 6px;
+    margin: 2px 3px 0 0;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+  }
+  .tool-pill.ok { color: var(--green); border-color: rgba(57,255,106,0.3); }
+  .tool-pill.missing { color: var(--red); border-color: rgba(255,85,85,0.3); }
+  .tool-pill.off { text-decoration: line-through; opacity: 0.5; }
+
+  button.run {
+    width: 100%;
+    padding: 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-radius: 3px;
+    border: 1px solid var(--green);
+    background: rgba(57,255,106,0.08);
+    color: var(--green);
+    cursor: pointer;
+  }
+  button.run:hover { background: rgba(57,255,106,0.18); }
+  button.run:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.run.full { border-color: var(--amber); color: var(--amber); background: rgba(255,176,32,0.08); }
+  button.run.full:hover { background: rgba(255,176,32,0.18); }
+
+  .history { display: flex; flex-direction: column; gap: 4px; max-height: 280px; overflow-y: auto; }
+  .history-item {
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-dim);
+  }
+  .history-item:hover { border-color: var(--green); color: var(--text); }
+  .history-item.active { border-color: var(--green); color: var(--text); background: rgba(57,255,106,0.06); }
+  .status-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; }
+  .status-running { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .status-completed { background: var(--green); }
+  .status-failed { background: var(--red); }
+  .status-stopped { background: var(--text-dim); }
+
+  .scan-controls { display: flex; gap: 6px; }
+  .scan-controls .btn-sm { padding: 5px 10px; font-size: 11px; }
+
+  .progress-wrap { padding: 10px 14px 0; }
+  .progress-track {
+    height: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--green), var(--cyan));
+    transition: width 0.4s ease;
+  }
+  .progress-fill.full { background: linear-gradient(90deg, var(--amber), var(--green)); }
+  .progress-fill.stopped { background: var(--text-dim); }
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 5px;
+    padding-bottom: 4px;
+  }
+
+  .domain-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+  .domain-link:hover { color: var(--green); }
+
+  .terminal {
+    background: #060806;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 12px 14px;
+    height: 260px;
+    overflow-y: auto;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .terminal .l { white-space: pre-wrap; word-break: break-all; }
+  /* Deliberately fixed colors, not theme variables — the terminal itself
+     stays dark in both themes (a conventional "always-dark" terminal
+     look, like most code editors keep even under a light UI theme), so
+     its text needs to stay readable against that fixed dark background
+     regardless of which theme is active. Using var(--text) here was the
+     actual bug: in light mode that resolves to a dark color meant for a
+     light background, rendering as dark text on a near-black terminal —
+     effectively invisible. */
+  .l-cmd { color: #33d6c8; }
+  .l-meta { color: #f0a830; }
+  .l-warn { color: #f0a830; }
+  .l-error { color: #ff6b6b; }
+  .l-out { color: #d6ded6; }
+  /* The "why" line always sits directly above the "$ ..." command it
+     explains — italic + dimmer so it reads as a caption for the line
+     below it, not as another equally-weighted log entry. */
+  .l-why { color: var(--text-dim); font-style: italic; }
+
+  /* Same "why" notes as the terminal's l-why lines, pulled into their own
+     panel — the terminal scrolls fast enough during a Full-mode scan
+     that a one-line italic note flies past before it's readable; here
+     each one persists as its own card, in normal (theme-aware, not
+     fixed-dark) text since this isn't trying to look like a terminal. */
+  .why-panel {
+    max-height: 160px;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 2px 12px;
+  }
+  /* Each note is one row, not a wrapped paragraph — the full text is
+     still there, just scrollable sideways (or readable via the title
+     tooltip) instead of pushing the panel's height out. This is the
+     deliberate trade for a panel that's meant to sit below Live Output
+     without competing with it for vertical space. */
+  .why-entry {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .why-entry:last-child { border-bottom: none; }
+  .why-tool { color: var(--cyan); font-weight: 600; font-size: 12px; flex-shrink: 0; }
+  .why-text { color: var(--text-dim); font-size: 12px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td {
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 260px;
+  }
+  th {
+    color: var(--text-dim);
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 10.5px;
+    letter-spacing: 0.5px;
+    position: sticky; top: 0; background: var(--panel);
+  }
+  tr:hover td { background: rgba(57,255,106,0.04); }
+  .status-2xx { color: var(--green); }
+  .status-3xx { color: var(--amber); }
+  .status-4xx, .status-5xx { color: var(--red); }
+  .table-wrap { max-height: 380px; overflow: auto; }
+
+  /* Scans report view */
+  .report-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    flex-wrap: wrap; gap: 14px;
+  }
+  .report-title { font-size: 18px; color: var(--green); }
+  .report-meta { font-size: 11.5px; color: var(--text-dim); margin-top: 4px; }
+  .status-badge {
+    display: inline-block; font-size: 10.5px; padding: 2px 8px; border-radius: 10px;
+    border: 1px solid var(--line); text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .status-badge.status-completed { color: var(--green); border-color: rgba(57,255,106,0.3); }
+  .status-badge.status-running { color: var(--amber); border-color: rgba(255,176,32,0.3); }
+  .status-badge.status-failed { color: var(--red); border-color: rgba(255,85,85,0.3); }
+  .status-badge.status-stopped { color: var(--text-dim); }
+
+  .request-card { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .request-field .k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); }
+  .request-field .v { font-size: 13px; margin-top: 3px; word-break: break-word; }
+  .commands-list {
+    background: #060806; border: 1px solid var(--line); border-radius: 4px;
+    padding: 10px 12px; font-size: 12px; color: var(--cyan); max-height: 160px; overflow-y: auto;
+  }
+  .commands-list > div { padding: 2px 0; white-space: pre-wrap; word-break: break-all; }
+  .cmd-entry { margin-bottom: 8px; }
+  .cmd-entry:last-child { margin-bottom: 0; }
+  .cmd-why { color: var(--text-dim); font-style: italic; white-space: pre-wrap; word-break: break-word; }
+  .cmd-line { color: var(--cyan); white-space: pre-wrap; word-break: break-all; }
+
+  .search-row { display: flex; gap: 8px; align-items: center; }
+  .search-row input {
+    flex: 1; background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    font-family: var(--mono); font-size: 13px; padding: 9px 12px; border-radius: 3px; outline: none;
+  }
+  .search-row input:focus { border-color: var(--green); }
+  .search-count { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+
+  .verify-check { cursor: pointer; width: 15px; height: 15px; accent-color: var(--green); }
+  tr.row-verified td:first-child { border-left: 2px solid var(--green); }
+  .row-hidden { display: none !important; }
+  .port-row-clickable { cursor: pointer; }
+  .port-row-clickable:hover td { background: rgba(57,255,106,0.06); }
+  .port-detail-row td { padding: 0 18px 10px; border-top: none; }
+
+  .report-tabs { display: flex; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .report-tab {
+    padding: 10px 18px; background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--text-dim); font-family: var(--mono); font-size: 12px; letter-spacing: 0.5px; cursor: pointer;
+  }
+  .report-tab:hover { color: var(--text); }
+  .report-tab.active { color: var(--green); border-bottom-color: var(--green); }
+  .report-tab .tab-count { color: var(--text-dim); font-size: 10px; margin-left: 3px; }
+  .report-tab.active .tab-count { color: var(--green); opacity: 0.75; }
+  .report-tab-content { padding: 0; }
+
+  .tool-modal-tabs {
+    display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 4px;
+  }
+  .tool-modal-tab {
+    padding: 7px 14px; background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--text-dim); font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.5px; cursor: pointer;
+  }
+  .tool-modal-tab:hover { color: var(--text); }
+  .tool-modal-tab.active { color: var(--green); border-bottom-color: var(--green); }
+
+  .confidence-badge {
+    display: inline-block; font-size: 10.5px; padding: 2px 8px; border-radius: 10px;
+    border: 1px solid var(--line); white-space: nowrap;
+  }
+  .confidence-badge.high { color: var(--green); border-color: rgba(57,255,106,0.3); }
+  .confidence-badge.medium { color: var(--amber); border-color: rgba(255,176,32,0.3); }
+  .confidence-badge.low { color: var(--red); border-color: rgba(255,85,85,0.3); }
+  .confidence-unset { color: var(--text-dim); font-size: 11px; }
+
+  .validate-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+
+  .stat-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .stat {
+    flex: 1;
+    min-width: 100px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 12px 14px;
+  }
+  .stat .num { font-size: 22px; color: var(--green); }
+  .stat .lbl { font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+  .stat-clickable { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+  .stat-clickable:hover { border-color: var(--green); background: rgba(57,255,106,0.05); }
+
+  .tool-list-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: 3px;
+    margin-bottom: 4px; cursor: pointer; font-size: 12.5px;
+  }
+  .tool-list-item:hover { border-color: var(--green); }
+  .tool-list-item .tl-kind { font-size: 9.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+  .tool-active-dot { color: var(--green); margin-left: 5px; }
+  .tool-category-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--cyan);
+    margin: 12px 0 5px; padding-bottom: 3px; border-bottom: 1px solid var(--line);
+  }
+  .tool-category-label:first-child { margin-top: 0; }
+  #toolsFilterInput { font-size: 12px; padding: 6px 8px; margin-bottom: 4px; }
+
+  .tool-run-grid {
+    display: flex; flex-direction: column; gap: 1px; padding: 8px 12px;
+    border: 1px solid var(--line); border-radius: 4px; background: var(--panel-2);
+  }
+  .tool-run-row {
+    font-size: 12px; padding: 5px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tool-run-clickable { border-radius: 3px; margin: 0 -4px; padding-left: 4px; padding-right: 4px; transition: background 0.15s; white-space: normal; }
+  .tool-run-clickable:hover { background: rgba(57,255,106,0.08); }
+  .tool-run-clickable:hover .tool-run-name { text-decoration: underline; }
+  .tool-run-name { color: var(--text); font-family: var(--mono); margin-right: 4px; }
+  .tool-run-label { font-size: 11px; }
+  .tool-run-detail {
+    margin: 8px 0 4px; cursor: default; white-space: normal;
+  }
+  .tool-run-block { margin-bottom: 8px; }
+  .tool-run-block:last-child { margin-bottom: 0; }
+  .tool-run-block-cmd {
+    font-family: var(--mono); font-size: 11px; color: var(--green); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 3px; padding: 5px 8px; margin-bottom: 4px;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .tool-run-block-lines {
+    font-family: var(--mono); font-size: 11px; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 3px; padding: 6px 8px; max-height: 220px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-all; line-height: 1.5;
+  }
+  .tool-run-view-results {
+    font-size: 11px; color: var(--green); cursor: pointer; margin-top: 6px; text-align: right;
+  }
+  .tool-run-view-results:hover { text-decoration: underline; }
+
+  .compare-section {
+    display: flex; flex-direction: column; gap: 2px; padding: 8px 12px;
+    border: 1px solid var(--line); border-radius: 4px; background: var(--panel-2); margin-top: 4px;
+  }
+  .compare-row {
+    display: flex; gap: 8px; align-items: baseline; font-size: 12px; padding: 3px 0;
+    font-family: var(--mono);
+  }
+  .compare-icon { font-weight: bold; width: 12px; flex-shrink: 0; }
+
+  .vuln-takeover-banner {
+    background: rgba(255,85,85,0.12); border: 1px solid var(--red); border-radius: 4px;
+    padding: 10px 14px; margin-bottom: 14px; color: var(--red); font-size: 12.5px; font-weight: bold;
+  }
+  .vuln-list { display: flex; flex-direction: column; gap: 8px; }
+  .vuln-card {
+    border: 1px solid var(--line); border-radius: 4px; background: var(--panel-2); overflow: hidden;
+  }
+  .vuln-card-urgent { border-color: var(--red); }
+  .vuln-card-resolved { opacity: 0.5; }
+  .vuln-card-resolved:hover { opacity: 0.85; }
+  .triage-controls {
+    display: flex; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line);
+  }
+  .triage-controls select {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px;
+    color: var(--text); font-size: 11px; padding: 3px 6px; font-family: var(--mono);
+  }
+  .triage-note-input {
+    flex: 1; background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px;
+    color: var(--text); font-size: 11px; padding: 3px 6px; font-family: var(--mono);
+  }
+  .triage-note-input:focus, .triage-controls select:focus { outline: none; border-color: var(--green); }
+  .vuln-card-header {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border-bottom: 1px solid var(--line); background: rgba(255,255,255,0.02);
+  }
+  .vuln-severity-badge {
+    font-size: 10px; font-weight: bold; color: #05130a; padding: 2px 8px; border-radius: 3px;
+    letter-spacing: 0.5px; flex-shrink: 0;
+  }
+  .vuln-name { font-size: 13px; color: var(--text); }
+  .vuln-card-body { padding: 8px 12px; }
+  .vuln-detail-row { display: flex; gap: 8px; font-size: 12px; padding: 2px 0; }
+  .vuln-detail-label { color: var(--text-dim); width: 90px; flex-shrink: 0; }
+  .vuln-source-badge {
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim);
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; flex-shrink: 0;
+  }
+  .vuln-expand-hint { margin-left: auto; font-size: 10.5px; color: var(--text-dim); flex-shrink: 0; }
+  .vuln-detail-expand {
+    padding: 8px 12px; margin: 0 12px 10px; font-size: 12px; line-height: 1.5;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 3px;
+    color: var(--text-dim); white-space: pre-wrap; word-break: break-word;
+  }
+  .vuln-summary-bar {
+    font-size: 12.5px; color: var(--text-dim); padding: 8px 0 12px; border-bottom: 1px solid var(--line);
+    margin-bottom: 12px;
+  }
+  .vuln-search-wrap { margin-bottom: 12px; }
+  .vuln-search-input {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px;
+    padding: 7px 10px; font-size: 12.5px; color: var(--text); font-family: var(--mono);
+  }
+  .vuln-search-input:focus { outline: none; border-color: var(--green); }
+
+  .surface-summary {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px;
+    padding: 14px 16px; margin-top: 16px;
+  }
+  .surface-summary-headline { font-size: 13.5px; line-height: 1.6; color: var(--text); }
+  .surface-summary-risk { font-size: 12.5px; margin-top: 8px; color: var(--text-dim); }
+  .surface-summary-risk-high { color: var(--amber); }
+  .surface-summary-risk-critical { color: var(--red); }
+  .surface-summary-risk-clean { color: var(--green); }
+
+  .shadow-it-badge {
+    font-size: 9px; color: var(--amber); border: 1px solid var(--amber); border-radius: 3px;
+    padding: 1px 5px; margin-left: 8px; text-transform: uppercase; letter-spacing: 0.3px;
+    font-family: var(--mono); vertical-align: middle; cursor: help;
+  }
+
+
+
+
+  .cheatsheet-table td { padding: 6px 10px; font-size: 12px; vertical-align: top; }
+  .cheatsheet-table td:first-child { color: var(--cyan); white-space: nowrap; font-family: var(--mono); }
+  .cheatsheet-table td:last-child { color: var(--text-dim); }
+
+  .screenshot-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px; padding: 14px 18px 20px;
+  }
+  .screenshot-card {
+    display: block; border: 1px solid var(--line); border-radius: 4px; overflow: hidden;
+    background: var(--panel-2); text-decoration: none; color: inherit; transition: border-color 0.15s;
+  }
+  .screenshot-card:hover { border-color: var(--green); }
+  .screenshot-card img { width: 100%; height: 140px; object-fit: cover; object-position: top; display: block; background: #000; }
+  .screenshot-meta { padding: 8px 10px; }
+  .screenshot-host { font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .screenshot-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .screenshot-failed { cursor: default; }
+  .screenshot-placeholder {
+    height: 140px; display: flex; align-items: center; justify-content: center;
+    color: var(--red); font-size: 28px; background: rgba(255,85,85,0.06);
+  }
+
+  .arg-checklist {
+    border: 1px solid var(--line); border-radius: 3px; max-height: 240px; overflow-y: auto;
+    background: var(--panel-2);
+  }
+  .arg-check-row {
+    display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+    border-bottom: 1px solid var(--line); cursor: pointer; font-size: 12px;
+  }
+  .arg-check-row:last-child { border-bottom: none; }
+  .arg-check-row:hover { background: rgba(57,255,106,0.05); }
+  .arg-check-row input[type="checkbox"] { accent-color: var(--green); flex-shrink: 0; cursor: pointer; }
+  .arg-flag {
+    color: var(--cyan); font-family: var(--mono); white-space: nowrap; flex-shrink: 0; min-width: 120px;
+  }
+  .arg-desc { color: var(--text-dim); }
+
+  .export-row { display: flex; gap: 8px; }
+  .export-row a {
+    text-decoration: none;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    padding: 6px 12px;
+    border-radius: 3px;
+    font-size: 11.5px;
+    letter-spacing: 0.5px;
+  }
+  .export-row a:hover { color: var(--green); border-color: var(--green); }
+
+  .empty { color: var(--text-dim); padding: 30px; text-align: center; font-size: 12.5px; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+
+  /* Settings modal */
+  .overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 50;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 20px;
+    overflow-y: auto;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    width: 100%;
+    max-width: 760px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky; top: 0; background: var(--panel); z-index: 2;
+  }
+  .modal-header .title { color: var(--green); letter-spacing: 1px; font-size: 14px; }
+  .modal-close { background: none; border: none; color: var(--text-dim); font-size: 18px; cursor: pointer; }
+  .modal-close:hover { color: var(--red); }
+  .settings-quicknav {
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 20px;
+    border-bottom: 1px solid var(--line); background: var(--panel-2);
+    position: sticky; top: 53px; z-index: 2;
+  }
+  .settings-quicknav a {
+    font-size: 10.5px; color: var(--text-dim); text-decoration: none;
+    border: 1px solid var(--line); border-radius: 3px; padding: 3px 8px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .settings-quicknav a:hover { color: var(--green); border-color: var(--green); }
+  .modal-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 22px; }
+
+  /* Tutorial walkthrough — a lightweight coachmark rather than a full-page
+     modal: the real element being explained gets a glowing outline (so it
+     stays visibly part of the actual app, nothing is covered up), and a
+     small fixed card holds the explanation + Back/Next in the same place
+     every step so it doesn't jump around the screen as targets change
+     across views. Above everything else (including the scanline overlay
+     at z-index 9999) since it has to stay usable through every view. */
+  .tutorial-highlight {
+    outline: 3px solid var(--green) !important;
+    outline-offset: 3px;
+    box-shadow: var(--tutorial-glow);
+    border-radius: 6px;
+    position: relative;
+    z-index: 60;
+  }
+  .tutorial-card {
+    display: none;
+    position: fixed;
+    right: 24px; bottom: 24px;
+    width: 340px;
+    max-width: calc(100vw - 48px);
+    background: var(--panel);
+    border: 1px solid var(--green);
+    border-radius: 6px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    z-index: 10000;
+    font-size: 12.5px;
+  }
+  .tutorial-card.open { display: block; }
+  .tutorial-card-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+  }
+  .tutorial-card-header .title {
+    color: var(--green); letter-spacing: 1px; font-size: 11px; text-transform: uppercase;
+  }
+  .tutorial-card-body { padding: 14px; line-height: 1.65; color: var(--text); max-height: 42vh; overflow-y: auto; }
+  .tutorial-card-footer {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 14px; border-top: 1px solid var(--line);
+  }
+  .tutorial-step-count { color: var(--text-dim); font-size: 10.5px; }
+  .settings-section-title {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim);
+    margin-bottom: 10px; border-bottom: 1px solid var(--line); padding-bottom: 6px;
+  }
+  .tool-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: 3px; margin-bottom: 6px;
+  }
+  .tool-row .tname { font-size: 13px; }
+  .tool-row .tmeta { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
+  .switch {
+    position: relative; width: 38px; height: 20px; flex-shrink: 0;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; cursor: pointer; inset: 0;
+    background: var(--line); border-radius: 20px; transition: 0.15s;
+  }
+  .slider:before {
+    position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px;
+    background: var(--text-dim); border-radius: 50%; transition: 0.15s;
+  }
+  .switch input:checked + .slider { background: rgba(57,255,106,0.25); }
+  .switch input:checked + .slider:before { transform: translateX(18px); background: var(--green); }
+
+  .tool-list-switch { width: 30px; height: 17px; margin-left: 8px; }
+  .tool-list-switch .slider:before { height: 11px; width: 11px; }
+  .tool-list-switch input:checked + .slider:before { transform: translateX(13px); }
+  .tool-disabled { opacity: 0.5; }
+  .tool-disabled:hover { opacity: 0.8; }
+
+  .badge { font-size: 9.5px; padding: 1px 6px; border-radius: 8px; border: 1px solid var(--line); margin-left: 6px; }
+  .badge.ok { color: var(--green); border-color: rgba(57,255,106,0.3); }
+  .badge.missing { color: var(--red); border-color: rgba(255,85,85,0.3); }
+  .badge.info { color: var(--cyan); border-color: rgba(51,214,200,0.3); }
+
+  .key-row { display: flex; gap: 8px; align-items: center; }
+  .key-row input { flex: 1; }
+  .btn-sm {
+    padding: 9px 14px; font-family: var(--mono); font-size: 12px; border-radius: 3px;
+    border: 1px solid var(--green); color: var(--green); background: rgba(57,255,106,0.08); cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-sm:hover { background: rgba(57,255,106,0.18); }
+  .btn-sm.danger { border-color: var(--red); color: var(--red); background: rgba(255,85,85,0.08); }
+  .btn-sm.danger:hover { background: rgba(255,85,85,0.18); }
+  .hint { font-size: 11px; color: var(--text-dim); margin-top: 6px; line-height: 1.5; }
+  .hint code { color: var(--cyan); }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .form-grid .full-span { grid-column: 1 / -1; }
+
+  /* Company profile modal */
+  .profile-hero {
+    padding: 4px 0 16px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 16px;
+  }
+  .profile-hero-name { font-size: 19px; color: var(--green); letter-spacing: 0.3px; }
+  .profile-hero-desc { font-size: 12.5px; color: var(--text-dim); margin-top: 6px; line-height: 1.5; }
+  .profile-hero-facts { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+  .profile-fact { font-size: 12.5px; color: var(--text); }
+  .exec-summary-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px; margin-top: 4px;
+  }
+  .exec-summary-metric {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px;
+  }
+  .exec-summary-metric-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); margin-bottom: 4px;
+  }
+  .exec-summary-metric-value { font-size: 17px; font-weight: bold; }
+  .exec-summary-metric-detail { font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.4; }
+  .profile-fact b { color: var(--text-dim); font-weight: 500; }
+  .profile-stats {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px;
+  }
+  .pstat {
+    flex: 1; min-width: 90px; text-align: center;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px;
+    padding: 10px 8px;
+  }
+  .pnum { font-size: 18px; color: var(--green); }
+  .plbl { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+  .profile-section { margin-bottom: 18px; }
+  .profile-section-title {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim);
+    margin-bottom: 8px; border-bottom: 1px solid var(--line); padding-bottom: 6px;
+  }
+  .profile-row {
+    display: flex; justify-content: space-between; gap: 16px;
+    padding: 6px 0; font-size: 12.5px; border-bottom: 1px solid rgba(30,42,28,0.5);
+  }
+  .profile-row span:first-child { color: var(--text-dim); flex-shrink: 0; }
+  .profile-row span:last-child { text-align: right; }
+  .employee-list {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 6px 14px; margin-top: 4px;
+  }
+  .employee-row {
+    display: flex; flex-direction: column; padding: 6px 0;
+    border-bottom: 1px solid rgba(30,42,28,0.5); font-size: 12.5px;
+  }
+  .employee-name { color: var(--text); }
+  .employee-title { color: var(--text-dim); font-size: 11px; margin-top: 1px; }
+  .profile-writeup {
+    font-size: 13px; line-height: 1.65; color: var(--text);
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px;
+    padding: 14px 16px;
+  }
+
+  .whatweb-tech-list { display: flex; flex-direction: column; gap: 2px; }
+  .whatweb-tech-row {
+    padding: 7px 4px; border-radius: 3px; cursor: pointer; transition: background 0.15s;
+  }
+  .whatweb-tech-row:hover { background: rgba(57,255,106,0.06); }
+  .whatweb-tech-bar-wrap { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .whatweb-tech-name { font-size: 12.5px; color: var(--text); font-family: var(--mono); }
+  .whatweb-tech-pct { font-size: 11px; color: var(--green); font-weight: bold; }
+  .whatweb-tech-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.06); overflow: hidden; }
+  .whatweb-tech-bar-fill { height: 100%; background: var(--green); border-radius: 3px; }
+  .whatweb-tech-detail {
+    margin-top: 8px; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 3px; cursor: default;
+  }
+  .whatweb-tech-detail-row {
+    display: flex; justify-content: space-between; gap: 12px; padding: 3px 0;
+    font-size: 11.5px; border-bottom: 1px solid rgba(30,42,28,0.5);
+  }
+  .whatweb-tech-detail-row:last-child { border-bottom: none; }
+  .whatweb-tech-detail-host { color: var(--text-dim); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .whatweb-tech-detail-value { color: var(--cyan); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .tech-kb-badge {
+    font-size: 9px; color: var(--cyan); border: 1px solid var(--cyan); border-radius: 3px;
+    padding: 1px 5px; margin-left: 8px; text-transform: uppercase; letter-spacing: 0.3px;
+    font-family: var(--mono); vertical-align: middle;
+  }
+  .tech-kb-panel {
+    padding: 8px 10px; background: rgba(51,214,200,0.06); border: 1px solid var(--line);
+    border-radius: 3px; margin-bottom: 8px;
+  }
+  .tech-kb-panel-empty { color: var(--text-dim); font-size: 11.5px; font-style: italic; }
+  .tech-kb-row {
+    display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.5;
+    padding: 3px 0;
+  }
+  .tech-kb-row.tech-kb-security { color: var(--amber); }
+  .tech-kb-icon { flex-shrink: 0; font-size: 12px; margin-top: 1px; }
+  .whatweb-tech-detail-hosts-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim);
+    margin: 6px 0 4px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div>
+      <pre class="logo-ascii">███╗   ███╗██╗███╗   ███╗██╗██████╗
+████╗ ████║██║████╗ ████║██║██╔══██╗
+██╔████╔██║██║██╔████╔██║██║██████╔╝
+██║╚██╔╝██║██║██║╚██╔╝██║██║██╔══██╗
+██║ ╚═╝ ██║██║██║ ╚═╝ ██║██║██║  ██║
+╚═╝     ╚═╝╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═╝</pre>
+      <div class="logo-tag">// attack surface enumeration</div>
+    </div>
+    <div class="tagline">You don't need to lose an eye for this kind of knowledge. You just need a domain.</div>
+  </div>
+  <div style="display:flex; align-items:flex-start; gap:10px;">
+    <div class="top-nav">
+      <button class="top-tab active" id="navScan" onclick="switchView('scan')">Scan</button>
+      <button class="top-tab" id="navScans" onclick="switchView('scans')">Scans</button>
+      <button class="top-tab" id="navCompany" onclick="switchView('company')">Company</button>
+      <button class="top-tab" id="navVulnerability" onclick="switchView('vulnerability')">Vulnerability</button>
+    </div>
+    <button class="gear-btn" id="tutorialBtn" onclick="startTutorial()" title="Walk through how to use Mimir">❓ Tutorial</button>
+    <button class="gear-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Switch between dark and light mode">🌙</button>
+    <button class="gear-btn" id="settingsBtn" onclick="openSettings()">⚙ Settings</button>
+  </div>
+</header>
+
+<div id="viewScan">
+<div class="layout">
+  <div class="sidebar">
+    <div class="field">
+      <label>Target domain</label>
+      <input id="domainInput" type="text" placeholder="example.com" autocomplete="off">
+      <button class="btn-sm" id="tldCheckBtn" type="button" style="margin-top:6px;"
+              title="Check whether the same name resolves under other common TLDs (.com/.co.za/.org/etc.) before scanning — not a literal wildcard, there's no tool that understands 'example.*'"
+              onclick="checkDomainVariants()">🌐 Check other TLDs</button>
+      <div id="tldCheckPanel" style="display:none; margin-top:8px;"></div>
+      <button class="btn-sm" id="subdomainCheckBtn" type="button" style="margin-top:6px;"
+              title="Check whether common subdomain prefixes (admin/vpn/staging/mail/api/etc.) resolve for this domain before scanning — a quick manual peek, not a replacement for the full subdomain enumeration a scan already does"
+              onclick="checkSubdomainPrefixes()">🔎 Check common subdomains</button>
+      <div id="subdomainCheckPanel" style="display:none; margin-top:8px;"></div>
+    </div>
+
+    <div class="field">
+      <label>Company name <span style="color:var(--text-dim); text-transform:none; letter-spacing:0; font-size:10px;">— optional, if it differs from the domain</span></label>
+      <input id="companyNameInput" type="text" placeholder="e.g. Acme Corporation" autocomplete="off">
+    </div>
+
+    <div>
+      <div class="tabs">
+        <button class="tab active fast" id="tabFast" data-mode="fast">FAST</button>
+        <button class="tab full" id="tabFull" data-mode="full">FULL STACK</button>
+      </div>
+      <div class="tab-desc" id="tabDesc"></div>
+      <div id="toolPills"></div>
+    </div>
+
+    <button class="run" id="runBtn">Run scan</button>
+
+    <div class="panel">
+      <div class="panel-title">Scan history</div>
+      <div class="history" id="history" style="padding:10px;"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Tools <span style="color:var(--text-dim); text-transform:none; letter-spacing:0; font-size:10.5px;">— click a name for its command &amp; options</span></span>
+        <label class="switch tool-list-switch" id="allToolsSwitchLabel" title="Enable/disable every tool at once (all modes)">
+          <input type="checkbox" id="allToolsSwitch" onchange="toggleAllTools(this.checked)">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="toolsListSubtitle" class="hint" style="padding:6px 10px 0;"></div>
+      <div style="padding:8px 10px 0;">
+        <input type="text" id="toolsFilterInput" placeholder="Filter tools…" oninput="renderToolsList()" style="width:100%; box-sizing:border-box;">
+      </div>
+      <div id="toolsList" style="padding:8px 10px 10px; max-height:480px; overflow-y:auto;"></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="stat-row" id="statRow"></div>
+
+    <div class="panel">
+      <div class="panel-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Live output <span id="scanLabel" style="color:var(--text-dim); text-transform:none; letter-spacing:0;"></span></span>
+        <span style="display:flex; align-items:center; gap:8px;">
+          <span class="scan-controls" id="scanControls" style="display:none;">
+            <button class="btn-sm" onclick="skipCurrentStep()" title="Kill whatever's currently running and move to the next step">⏭ Skip step</button>
+            <button class="btn-sm danger" onclick="stopScan()" title="Stop the whole scan — results found so far are kept">⏹ Stop scan</button>
+          </span>
+          <button class="btn-sm" id="copyTerminalBtn" onclick="copyTerminalOutput()" title="Copy the full output for this scan — not just what's currently visible in the terminal">📋 Copy output</button>
+        </span>
+      </div>
+      <div class="progress-wrap" id="progressWrap" style="display:none;">
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-label"><span id="progressStageLabel">—</span><span id="progressPercentLabel">0%</span></div>
+      </div>
+      <div class="terminal" id="terminal"><div class="empty">No scan running. Enter a domain and hit Run scan.</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Why each tool ran <span style="color:var(--text-dim); text-transform:none; letter-spacing:0; font-size:10.5px;">— the same notes as the terminal above, pulled out so they don't scroll past</span></div>
+      <div class="why-panel" id="whyPanel"><div class="empty">Nothing yet — these fill in as the scan runs.</div></div>
+    </div>
+
+    <div class="panel" id="hostsPanel">
+      <div class="panel-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Hosts &amp; assets</span>
+        <span class="export-row" id="exportRow"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="resultsTable">
+          <thead>
+            <tr>
+              <th>Subdomain</th><th>IP</th><th>Sources</th><th>HTTP</th><th>Title</th><th>Tech</th><th>Ports</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"><tr><td colspan="7" class="empty">No results yet — run a scan above, or select one from Scan History.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel" id="intelPanel" style="display:none;">
+      <div class="panel-title">OSINT &amp; enrichment intel <span style="color:var(--text-dim); text-transform:none; letter-spacing:0;">— whois, crt.sh, ip-geo, social, shodan, custom sources</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Host</th><th>Source</th><th>Field</th><th>Value</th></tr></thead>
+          <tbody id="intelBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel" id="emailsPanel" style="display:none;">
+      <div class="panel-title">Emails harvested</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Email</th><th>Source</th></tr></thead>
+          <tbody id="emailsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel" id="liveScreenshotsPanel" style="display:none;">
+      <div class="panel-title">Screenshots</div>
+      <div id="liveScreenshotsGrid"></div>
+    </div>
+
+    <div class="panel" id="liveToolsPanel" style="display:none;">
+      <div class="panel-title">Tools this scan <span style="color:var(--text-dim); text-transform:none; letter-spacing:0; font-size:10.5px;">— updates live as each stage finishes</span></div>
+      <div id="liveToolsGrid"></div>
+    </div>
+  </div>
+</div>
+</div><!-- /viewScan -->
+
+<div id="viewScans" style="display:none;">
+  <div class="scans-layout">
+    <div class="sidebar">
+      <div class="field" style="display:flex; gap:8px; align-items:flex-end;">
+        <div style="flex:1;">
+          <label>Filter scans</label>
+          <input id="scansFilterInput" type="text" placeholder="filter by domain..." oninput="renderScansList()">
+        </div>
+        <button class="btn-sm" onclick="openCompare()" title="Compare two scans">🔀 Compare</button>
+      </div>
+      <div class="panel">
+        <div class="panel-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>
+            <input type="checkbox" id="scansSelectAll" onchange="toggleSelectAllScans(this.checked)" style="vertical-align:middle; margin-right:6px;">
+            All scans
+          </span>
+          <span id="scansSelectedCount" class="hint" style="text-transform:none; letter-spacing:0; font-size:10.5px;"></span>
+        </div>
+        <div id="scansBulkBar" style="display:none; padding:8px 10px; border-bottom:1px solid var(--line); gap:8px; flex-wrap:wrap;">
+          <button class="btn-sm" onclick="bulkExportScans()">⬇ Export selected</button>
+          <button class="btn-sm danger" onclick="bulkDeleteScans()">🗑 Delete selected</button>
+        </div>
+        <div class="history" id="scansList" style="padding:10px; max-height: none;"></div>
+      </div>
+    </div>
+
+    <div class="main" id="scanReportMain">
+      <div class="empty" style="padding:60px 20px;">Select a scan to view its report.</div>
+    </div>
+  </div>
+</div>
+
+<div id="viewCompany" style="display:none;">
+  <div class="scans-layout">
+    <div class="sidebar">
+      <div class="field">
+        <label>Which scan's company data</label>
+        <select id="companyScanPicker" onchange="updateRunButtonState('companyRunBtn','companyRunHint',this.value); loadCompanyView(this.value)"></select>
+      </div>
+      <button class="btn-sm" id="companyRunBtn" style="margin-top:10px; width:100%;" onclick="runCompanyScan()" disabled>Run company scan</button>
+      <div class="hint" id="companyRunHint" style="margin-top:6px;"></div>
+
+      <div id="aiAnalysisTrigger" style="margin-top:14px;"></div>
+      <div class="hint" style="margin-top:14px;">
+        This is an independent module — it doesn't run automatically as part of a Fast or Full
+        scan anymore. <b style="color:var(--text);">Run company scan</b> revalidates this scan's
+        hosts and web assets first (confirming what's actually still live right now), then runs
+        social-scan, the company-record lookup, CrossLinked, and an XposedOrNot breach check
+        against harvested emails — using the freshly-confirmed data, not whatever the original scan
+        happened to see. Only enabled once the scan itself has finished.
+        <br><br>
+        Shodan's <i>host enrichment</i> also runs as part of this (if you have an API key set below) —
+        but Shodan's <i>subdomain discovery</i> is a separate, still-automatic step that runs during
+        the scan itself, since it's really a discovery source like subfinder/amass, not a company-
+        profile activity. Same tool, two genuinely different jobs.
+      </div>
+      <div class="settings-section-title" style="margin-top:16px;">Tools in this module</div>
+      <div id="companyToolsList"></div>
+    </div>
+    <div class="main" id="companyMain">
+      <div class="panel">
+        <div class="panel-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>Live output <span id="companyScanLabel" style="color:var(--text-dim); text-transform:none; letter-spacing:0;"></span></span>
+          <button class="btn-sm" id="copyCompanyTerminalBtn" onclick="copyModuleTerminalOutput('companyLiveOutput', 'copyCompanyTerminalBtn')" title="Copy the full output for this module run">📋 Copy output</button>
+        </div>
+        <div class="terminal module-live-output" id="companyLiveOutput"><div class="empty">No company scan running right now — hit Run company scan to start one.</div></div>
+      </div>
+      <div id="companyProfileBody">
+        <div class="empty" style="padding:60px 20px;">Run or select a scan to see its company profile.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="viewVulnerability" style="display:none;">
+  <div class="scans-layout">
+    <div class="sidebar">
+      <div class="field">
+        <label>Which scan's vulnerability data</label>
+        <select id="vulnScanPicker" onchange="updateRunButtonState('vulnRunBtn','vulnRunHint',this.value); loadVulnerabilityView(this.value)"></select>
+      </div>
+      <button class="btn-sm" id="vulnRunBtn" style="margin-top:10px; width:100%;" onclick="runVulnerabilityScan()" disabled>Run vulnerability scan</button>
+      <div class="hint" id="vulnRunHint" style="margin-top:6px;"></div>
+      <div class="hint" style="margin-top:14px;">
+        This is an independent module — it doesn't run automatically as part of a Fast or Full
+        scan anymore. <b style="color:var(--text);">Run vulnerability scan</b> revalidates this
+        scan's web assets first — an asset that resolved during the original scan but doesn't
+        respond anymore gets excluded — then runs nuclei and ffuf against exactly the URLs
+        confirmed live right now, wpscan if WordPress was detected on one of them (needs an API
+        key below), and dalfox against any parameterized URLs gau/katana already found. Deliberately
+        never scans against stale enumeration data. Only enabled once the scan itself has finished.
+      </div>
+      <div class="settings-section-title" style="margin-top:16px;">Tools in this module</div>
+      <div id="vulnToolsList"></div>
+    </div>
+    <div class="main" id="vulnMain">
+      <div class="panel">
+        <div class="panel-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>Live output <span id="vulnScanLabel" style="color:var(--text-dim); text-transform:none; letter-spacing:0;"></span></span>
+          <button class="btn-sm" id="copyVulnTerminalBtn" onclick="copyModuleTerminalOutput('vulnLiveOutput', 'copyVulnTerminalBtn')" title="Copy the full output for this module run">📋 Copy output</button>
+        </div>
+        <div class="terminal module-live-output" id="vulnLiveOutput"><div class="empty">No vulnerability scan running right now — hit Run vulnerability scan to start one.</div></div>
+      </div>
+      <div id="vulnProfileBody">
+        <div class="empty" style="padding:60px 20px;">Run or select a scan to see its vulnerability findings.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tutorial walkthrough coachmark -->
+<div class="tutorial-card" id="tutorialCard">
+  <div class="tutorial-card-header">
+    <span class="title" id="tutorialCardTitle">Tutorial</span>
+    <button class="modal-close" onclick="exitTutorial()" title="Exit tutorial">✕</button>
+  </div>
+  <div class="tutorial-card-body" id="tutorialCardBody"></div>
+  <div class="tutorial-card-footer">
+    <span class="tutorial-step-count" id="tutorialStepCount"></span>
+    <div style="display:flex; gap:8px;">
+      <button class="btn-sm" id="tutorialBackBtn" onclick="prevTutorialStep()">← Back</button>
+      <button class="btn-sm" id="tutorialNextBtn" onclick="nextTutorialStep()">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div class="overlay" id="settingsOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="title">⚙ Tools &amp; resources</div>
+      <button class="modal-close" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="settings-quicknav">
+      <a href="#settingsSection-apikeys" onclick="scrollSettingsTo(event, 'settingsSection-apikeys')">API keys</a>
+      <a href="#settingsSection-ai" onclick="scrollSettingsTo(event, 'settingsSection-ai')">AI analysis</a>
+      <a href="#settingsSection-tools" onclick="scrollSettingsTo(event, 'settingsSection-tools')">Built-in tools</a>
+      <a href="#settingsSection-customtools" onclick="scrollSettingsTo(event, 'settingsSection-customtools')">Custom tools</a>
+      <a href="#settingsSection-apisources" onclick="scrollSettingsTo(event, 'settingsSection-apisources')">Custom API</a>
+      <a href="#settingsSection-wordlists" onclick="scrollSettingsTo(event, 'settingsSection-wordlists')">Wordlists</a>
+      <a href="#settingsSection-backup" onclick="scrollSettingsTo(event, 'settingsSection-backup')">Backup</a>
+      <a href="#settingsSection-cleardata" onclick="scrollSettingsTo(event, 'settingsSection-cleardata')">Clear data</a>
+    </div>
+    <div class="modal-body">
+
+      <div id="settingsSection-apikeys">
+        <div class="settings-section-title">API keys</div>
+        <div class="field" style="margin-bottom:8px;">
+          <label>Shodan API key</label>
+          <div class="key-row">
+            <input id="shodanKeyInput" type="text" placeholder="paste your Shodan API key">
+            <button class="btn-sm" onclick="saveApiKey('shodan')">Save</button>
+          </div>
+        </div>
+        <div class="hint" id="shodanStatus"></div>
+        <div class="hint">
+          Adds passive subdomains (dns/domain) plus per-IP open ports, org/ISP, ASN and known
+          CVEs. Get a key at <a href="https://account.shodan.io/" target="_blank" rel="noopener">account.shodan.io</a>.
+        </div>
+
+        <div class="field" style="margin-top:14px; margin-bottom:8px;">
+          <label>LeakIX API key</label>
+          <div class="key-row">
+            <input id="leakixKeyInput" type="text" placeholder="paste your LeakIX API key">
+            <button class="btn-sm" onclick="saveApiKey('leakix')">Save</button>
+          </div>
+        </div>
+        <div class="hint" id="leakixStatus"></div>
+        <div class="hint">
+          Free for researchers — adds per-IP indexed services and any exposed-data leaks LeakIX
+          has found for that host. Register and grab a key under Settings → API key at
+          <a href="https://leakix.net/" target="_blank" rel="noopener">leakix.net</a> (free account
+          required — LeakIX doesn't offer a keyless tier the way Shodan's InternetDB below does).
+        </div>
+
+        <div class="field" style="margin-top:14px; margin-bottom:8px;">
+          <label>WPScan API key</label>
+          <div class="key-row">
+            <input id="wpscanKeyInput" type="text" placeholder="paste your WPScan API key">
+            <button class="btn-sm" onclick="saveApiKey('wpscan')">Save</button>
+          </div>
+        </div>
+        <div class="hint" id="wpscanStatus"></div>
+        <div class="hint">
+          Only used if whatweb has already detected WordPress on a host — wpscan will not run
+          otherwise. Register a free key at <a href="https://wpscan.com/" target="_blank" rel="noopener">wpscan.com</a>.
+          <b style="color:var(--amber);">Worth knowing:</b> the free tier is a strict 25 requests/day, and
+          WPScan spends roughly one request per installed plugin/theme it checks — a single scan of a
+          plugin-heavy site can exhaust the whole daily quota on its own. This app only scans one
+          WordPress-confirmed host per run (not every one found) to help stay within that.
+        </div>
+
+        <div class="field" style="margin-top:14px; margin-bottom:8px;">
+          <label>Hunter.io API key</label>
+          <div class="key-row">
+            <input id="hunterKeyInput" type="text" placeholder="paste your Hunter.io API key">
+            <button class="btn-sm" onclick="saveApiKey('hunter')">Save</button>
+          </div>
+        </div>
+        <div class="hint" id="hunterStatus"></div>
+        <div class="hint">
+          Runs during the Company scan — real, verified emails found for the domain (not guessed
+          from a name pattern), plus the organization's detected address format. A sharper source
+          than CrossLinked (which finds employee names, not addresses, by default) or theHarvester
+          (search-engine scraping, which can surface a third-party ISP/MSSP's address instead of
+          the actual company's). Register a free key at
+          <a href="https://hunter.io/" target="_blank" rel="noopener">hunter.io</a> — 50 lookups/month,
+          no card required.
+        </div>
+
+        <div class="hint" style="margin-top:14px;">
+          <b style="color:var(--text);">Shodan InternetDB</b> needs no key or account at all — it's
+          always on if enabled below, and runs alongside (not instead of) the full Shodan
+          integration above if you have a key for that too. It only returns a lighter subset
+          (open ports, hostnames, CPEs, tags, known CVEs — no org/ISP/banners), refreshed weekly
+          rather than in real time, but costs nothing to use.
+        </div>
+      </div>
+
+      <div id="settingsSection-ai">
+        <div class="settings-section-title">AI analysis <span style="color:var(--text-dim); text-transform:none; letter-spacing:0; font-size:10px;">— entirely optional</span></div>
+        <div class="hint" style="margin-bottom:10px;">
+          Adds a narrative analysis layer to the Company profile — a threat-modeling write-up
+          generated by an LLM, reasoning over this scan's own already-collected findings.
+          Nothing else in this app depends on this in any way; every feature works identically
+          whether or not it's configured. Works with any OpenAI-compatible chat-completions
+          endpoint — a locally-running <a href="https://ollama.com/" target="_blank" rel="noopener">Ollama</a>
+          server (nothing leaves your machine), or a cloud provider like Groq or OpenRouter.
+        </div>
+        <div class="field" style="margin-bottom:8px;">
+          <label>Base URL</label>
+          <input id="aiBaseUrlInput" type="text" placeholder="http://localhost:11434/v1  (Ollama)  or  https://api.groq.com/openai/v1">
+        </div>
+        <div class="field" style="margin-bottom:8px;">
+          <label>Model</label>
+          <input id="aiModelInput" type="text" placeholder="e.g. llama3.1  or  llama-3.3-70b-versatile">
+        </div>
+        <div class="field" style="margin-bottom:8px;">
+          <label>API key <span style="color:var(--text-dim); font-weight:normal;">(leave blank for Ollama — it doesn't need one)</span></label>
+          <div class="key-row">
+            <input id="aiApiKeyInput" type="text" placeholder="only needed for cloud providers">
+            <button class="btn-sm" onclick="saveAiConfig()">Save</button>
+          </div>
+        </div>
+        <div class="hint" id="aiConfigStatus"></div>
+      </div>
+
+      <div id="settingsSection-tools">
+        <div class="settings-section-title">Built-in tools &amp; sources</div>
+        <div id="builtinToolsList"></div>
+        <div class="hint">
+          <code>crtsh</code>, <code>ip-geo</code> and <code>social-scan</code> need no API key or
+          installed binary — they're free HTTP lookups (certificate transparency, ip-api.com
+          geolocation, and a homepage scrape for social links/meta tags). <code>whois</code>,
+          <code>theharvester</code>, <code>naabu</code> and <code>nmap</code> need those binaries
+          on <code>PATH</code>. <code>nmap</code> runs a quick top-100-port pass in Fast mode and
+          a deeper top-1000 pass with version detection and default scripts in Full mode — both
+          use <code>-Pn</code> so hosts that don't respond to ping still get scanned rather than
+          skipped. The exact command each one runs is shown under its name — handy as a reference
+          when you're writing your own below.
+        </div>
+      </div>
+
+      <div id="settingsSection-customtools">
+        <div class="settings-section-title">Custom CLI tools</div>
+        <div id="customToolsList"></div>
+        <div class="form-grid">
+          <div class="field full-span">
+            <label>Name</label>
+            <input id="ctName" type="text" placeholder="e.g. chaos, sub+asset-combo">
+          </div>
+          <div class="field full-span">
+            <label>Command template</label>
+            <input id="ctCmd" type="text" placeholder="e.g. subfinder -d {domain} -silent -sources crtsh">
+          </div>
+          <div class="field full-span" style="display:flex; align-items:center; gap:10px;">
+            <label class="switch" style="flex-shrink:0;">
+              <input type="checkbox" id="ctShell" onchange="onShellToggle()">
+              <span class="slider"></span>
+            </label>
+            <div>
+              <div class="tname" style="font-size:12.5px;">Run as shell command</div>
+              <div class="tmeta">Enables <code>&amp;&amp;</code>, <code>;</code>, <code>|</code>, redirection — lets you chain multiple tools into one entry</div>
+            </div>
+          </div>
+          <div class="field" id="ctFormatWrap">
+            <label>Output format</label>
+            <select id="ctFormat">
+              <option value="plain">plain (one hostname per line)</option>
+              <option value="json:host">json — field: host</option>
+              <option value="json:subdomain">json — field: subdomain</option>
+              <option value="json:custom">json — custom field…</option>
+            </select>
+          </div>
+          <div class="field" id="ctCustomFieldWrap" style="display:none;">
+            <label>JSON field path</label>
+            <input id="ctCustomField" type="text" placeholder="e.g. data.hostname">
+          </div>
+          <div class="full-span">
+            <button class="btn-sm" onclick="addCustomTool()">Add tool</button>
+          </div>
+        </div>
+        <div class="hint" id="ctHint">
+          Use <code>{domain}</code> as a placeholder. In plain mode it's substituted directly into
+          the argument list, not through a shell, so there's no quoting/injection concern — but
+          that also means one binary, no chaining. Runs as a subdomain-discovery step in both scan
+          modes; results are tagged with the tool's name as the source.
+        </div>
+        <div class="hint" id="ctShellExample" style="display:none;">
+          Example combining two tools into one entry:
+          <br><code>subfinder -d {domain} -silent && assetfinder --subs-only {domain}</code>
+          <br>Both commands' output is captured and merged. <code>{domain}</code> is shell-quoted
+          automatically before substitution, and the domain itself is validated server-side to
+          reject shell metacharacters — so this is safe to use even though a shell is involved.
+        </div>
+      </div>
+
+      <div id="settingsSection-apisources">
+        <div class="settings-section-title">Custom API resources</div>
+        <div id="apiSourcesList"></div>
+        <div class="form-grid">
+          <div class="field">
+            <label>Name</label>
+            <input id="asName" type="text" placeholder="e.g. securitytrails, hunterio">
+          </div>
+          <div class="field">
+            <label>Type</label>
+            <select id="asCategory">
+              <option value="subdomain">Subdomain source</option>
+              <option value="enrich">Enrichment (per host/IP)</option>
+            </select>
+          </div>
+          <div class="field full-span">
+            <label>URL template</label>
+            <input id="asUrl" type="text" placeholder="https://api.example.com/v1/domain/{domain}?key={api_key}">
+          </div>
+          <div class="field full-span" id="asJsonPathWrap">
+            <label>JSON path to hostname list</label>
+            <input id="asJsonPath" type="text" placeholder="e.g. data.subdomains  or  data.records|hostname">
+          </div>
+          <div class="field full-span" id="asIntelFieldsWrap" style="display:none;">
+            <label>Fields to extract (comma-separated dotted paths)</label>
+            <input id="asIntelFields" type="text" placeholder="e.g. org, location.city, headcount">
+          </div>
+          <div class="field full-span">
+            <label>API key (optional — fills {api_key} in the URL)</label>
+            <input id="asApiKey" type="text" placeholder="leave blank if the URL needs none">
+          </div>
+          <div class="full-span">
+            <button class="btn-sm" onclick="addApiSource()">Add resource</button>
+          </div>
+        </div>
+        <div class="hint">
+          Placeholders: <code>{domain}</code> always available; <code>{ip}</code> available for
+          enrichment sources whose URL includes it (called once per resolved IP instead of once
+          per domain); <code>{api_key}</code> filled from the key field above.
+          For a <b>subdomain</b> source, the JSON path should point at a list — either of plain
+          hostname strings, or of objects, in which case add <code>|fieldname</code> to pull the
+          hostname out of each object (e.g. <code>data.results|hostname</code>).
+          For an <b>enrichment</b> source, each comma-separated field path is looked up in the
+          response and stored as intel against the host/IP.
+        </div>
+      </div>
+
+      <div id="settingsSection-wordlists">
+        <div class="settings-section-title">Wordlists</div>
+        <div class="hint" style="margin-bottom:10px;">
+          Upload wordlist files here once, then assign one to <code>amass</code>, <code>dnsx</code>,
+          <code>ffuf</code>, or <code>shuffledns</code> from that tool's own entry in the Tools sidebar
+          (or the Vulnerability module's tool list, for <code>ffuf</code>). Once assigned, that tool's
+          command changes itself automatically on the next scan — but the effect is genuinely different
+          depending on the tool: <code>amass</code>/<code>dnsx</code> run fine either way, a wordlist just
+          adds a bruteforce pass on top of what they'd already do passively, while <code>ffuf</code>/
+          <code>shuffledns</code> have nothing to do at all without one and are skipped outright until
+          you assign a wordlist.
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+          <label class="btn-sm" style="cursor:pointer; display:inline-block;">
+            ⬆ Upload wordlist
+            <input type="file" id="wordlistFileInput" style="display:none;" onchange="uploadWordlist(this)">
+          </label>
+          <span class="hint" id="wordlistUploadStatus"></span>
+        </div>
+        <div id="wordlistsList"></div>
+      </div>
+
+      <div id="settingsSection-backup">
+        <div class="settings-section-title">Backup &amp; restore</div>
+        <div class="hint" style="margin-bottom:10px;">
+          Everything — every scan, every log, every custom tool/variant/API source/key — already
+          persists automatically in <code>surface.db</code> next to <code>app.py</code>. It
+          survives restarts on its own; nothing here is required for normal day-to-day use. This
+          is for moving that state around: back it up before wiping a machine, copy it to a new
+          install, or restore an earlier snapshot.
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <a class="btn-sm" href="/api/backup/download" style="text-decoration:none; display:inline-block;">⬇ Download backup</a>
+          <label class="btn-sm" style="cursor:pointer; display:inline-block;">
+            ⬆ Restore from file
+            <input type="file" id="backupFileInput" accept=".db" style="display:none;" onchange="restoreBackup(this)">
+          </label>
+        </div>
+        <div class="hint" id="backupStatus" style="margin-top:10px;"></div>
+        <div class="hint" style="margin-top:6px; color:var(--amber);">
+          Restoring replaces everything currently in the app — all scans, tools, variants, and
+          keys — with whatever's in the uploaded file. There's no undo short of restoring a
+          different backup, so make sure that's really what you want first.
+        </div>
+      </div>
+
+      <div id="settingsSection-cleardata">
+        <div class="settings-section-title">Clear cached / stored data</div>
+        <div class="hint" style="margin-bottom:10px;">
+          Two different things live here, worth telling apart. The app now tells your browser
+          never to cache any of its pages going forward, but that doesn't retroactively clear
+          whatever it already cached from before this fix existed — <b>Clear browser cache</b>
+          below does that. Separately, <b>Reset scan data</b> wipes the app's own stored
+          results (every scan, host, port, etc.) while leaving your setup — custom tools,
+          bespoke command variants, API keys — untouched.
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <button class="btn-sm" onclick="clearBrowserData()">🧹 Clear browser cache</button>
+          <button class="btn-sm danger" onclick="resetScanData()">🗑 Reset scan data</button>
+        </div>
+        <div class="hint" id="clearDataStatus" style="margin-top:10px;"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="compareOverlay">
+  <div class="modal" style="max-width: 880px;">
+    <div class="modal-header">
+      <div class="title">🔀 Compare Scans</div>
+      <button class="modal-close" onclick="closeCompare()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field">
+          <label>Scan A <span style="text-transform:none; letter-spacing:0; color:var(--text-dim);">— baseline</span></label>
+          <select id="compareScanA"></select>
+        </div>
+        <div class="field">
+          <label>Scan B <span style="text-transform:none; letter-spacing:0; color:var(--text-dim);">— compared against A</span></label>
+          <select id="compareScanB"></select>
+        </div>
+        <div class="full-span">
+          <button class="btn-sm" id="compareRunBtn" onclick="runCompare()">Compare</button>
+        </div>
+      </div>
+      <div id="compareResults" style="margin-top:16px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Tool command modal -->
+<div class="overlay" id="toolCommandOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="title" id="toolCommandTitle">Tool</div>
+      <button class="modal-close" onclick="closeToolCommand()">✕</button>
+    </div>
+    <div class="modal-body" id="toolCommandBody">
+      <div class="empty">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/core.js"></script>
+<script src="/js/company.js"></script>
+<script src="/js/report.js"></script>
+<script src="/js/settings.js"></script>
+<script src="/js/tutorial.js"></script>
+<script>
+  // Bootstrap — must run only after all four files above have loaded,
+  // since loadConfig() alone calls functions defined in three of them.
+  applyThemeButtonIcon();
+  setMode("fast");
+  loadConfig();
+  loadHistory();
+</script>
+</body>
+</html>

@@ -1,0 +1,207 @@
+/* Mimir TUI stylesheet — not a port of the web app's CSS (Textual's
+   layout model is too different for that to mean anything), but picks
+   the same cyberpunk palette so the two feel like the same product:
+   cyan for primary actions/accents, magenta for secondary accents,
+   amber for warnings, a near-black background. */
+
+Screen {
+    background: #060a10;
+    color: #d8e4e4;
+}
+
+Header {
+    background: #0a0e14;
+    color: #33d6c8;
+}
+
+Footer {
+    background: #0a0e14;
+}
+
+#app-title {
+    color: #33d6c8;
+    text-style: bold;
+    padding: 0 1;
+}
+
+#app-tagline {
+    color: #6b7a8a;
+    padding: 0 1 1 1;
+}
+
+TabbedContent {
+    background: #060a10;
+}
+
+Tabs {
+    background: #0a0e14;
+}
+
+Tab {
+    color: #6b7a8a;
+}
+
+Tab.-active {
+    color: #33d6c8;
+    text-style: bold;
+}
+
+.panel {
+    border: round #1c2733;
+    background: #0a0e14;
+    padding: 1 2;
+    margin: 1 0;
+}
+
+.panel-title {
+    color: #6b7a8a;
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+.hint {
+    color: #6b7a8a;
+}
+
+.hint-ok { color: #39ff6a; }
+.hint-warn { color: #ffd166; }
+.hint-error { color: #ff5566; }
+
+Button {
+    min-width: 12;
+}
+
+Button.-primary {
+    background: #113a36;
+    color: #33d6c8;
+    border: round #33d6c8;
+}
+
+Button.-danger {
+    background: #3a1115;
+    color: #ff5566;
+    border: round #ff5566;
+}
+
+Input {
+    border: round #1c2733;
+}
+
+Input:focus {
+    border: round #33d6c8;
+}
+
+DataTable {
+    background: #060a10;
+}
+
+DataTable > .datatable--header {
+    background: #0a0e14;
+    color: #33d6c8;
+    text-style: bold;
+}
+
+#log-view {
+    background: #050705;
+    border: round #1c2733;
+    height: 14;
+    padding: 0 1;
+}
+
+.log-cmd { color: #33d6c8; }
+.log-why { color: #9fb3c8; text-style: italic; }
+.log-meta { color: #a9b7c6; }
+.log-warn { color: #ffd166; }
+.log-error { color: #ff5566; }
+.log-out { color: #6b7a8a; }
+
+.tool-pill-ok { color: #39ff6a; }
+.tool-pill-missing { color: #ff5566; }
+
+ProgressBar > .bar--bar {
+    color: #33d6c8;
+}
+
+#history-toolbar {
+    height: auto;
+    padding: 1 0;
+}
+
+#history-toolbar Button {
+    margin-right: 1;
+}
+
+#scans-table {
+    height: 1fr;
+}
+
+#report-modal {
+    background: #0a0e14;
+    border: round #33d6c8;
+    margin: 2 6;
+    padding: 1 2;
+    height: 1fr;
+}
+
+#report-view {
+    height: 1fr;
+    background: #060a10;
+}
+
+#company-toolbar, #vuln-toolbar {
+    height: auto;
+    padding: 1 0;
+}
+
+#company-toolbar Button, #vuln-toolbar Button {
+    margin-right: 1;
+}
+
+.id-input {
+    width: 14;
+}
+
+#company-log-view, #vuln-log-view {
+    background: #050705;
+    border: round #1c2733;
+    height: 12;
+    padding: 0 1;
+}
+
+#vuln-triage-row, #leak-triage-row {
+    height: auto;
+    padding: 1 0;
+}
+
+#vuln-triage-row Static, #leak-triage-row Static {
+    width: auto;
+    padding: 1 1 0 0;
+}
+
+#vuln-triage-row Select, #leak-triage-row Select {
+    width: 24;
+}
+
+.settings-form-row {
+    height: auto;
+    padding: 0 0 1 0;
+}
+
+.settings-form-row Input {
+    width: 1fr;
+    margin-right: 1;
+}
+
+.settings-form-row Select {
+    width: 20;
+    margin-right: 1;
+}
+
+.settings-form-row Button {
+    margin-right: 1;
+}
+
+#set-tools-table, #set-custom-tools-table, #set-api-sources-table, #set-wordlists-table {
+    height: 10;
+    margin-bottom: 1;
+}

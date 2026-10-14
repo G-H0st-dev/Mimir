@@ -1,0 +1,51 @@
+==============================================================================
+MIMIR // scan documentation
+==============================================================================
+Domain:      example.com
+Scan #:      1
+Mode:        Fast
+Status:      completed
+Started:     2026-10-01T07:53:47+00:00
+Completed:   2026-10-01T07:53:48+00:00
+Generated:   2026-10-01T07:53:48+00:00
+
+This file is a complete, holistic record of one scan run: every line of
+text output generated during the scan (the full live log, exactly as it
+streamed to the terminal) followed by a complete results dump. It's
+written automatically once the scan finishes, and refreshed with the
+latest data (e.g. after Validate findings) any time it's re-downloaded.
+
+==============================================================================
+FULL LOG — every text output generated during this scan
+==============================================================================
+[2026-10-01T07:53:47+00:00] [meta] === starting fast scan for example.com ===
+[2026-10-01T07:53:47+00:00] [warn] [skip] subfinder not found on PATH — skipping subfinder
+[2026-10-01T07:53:47+00:00] [why] [why] crt.sh: searches public certificate transparency logs for any TLS certificate ever issued covering this domain — surfaces subdomains that were only ever exposed briefly, or that no DNS-brute-force wordlist would guess.
+[2026-10-01T07:53:47+00:00] [cmd] $ crt.sh certificate transparency lookup
+[2026-10-01T07:53:47+00:00] [error] [error] crt.sh lookup failed: <urlopen error Tunnel connection failed: 403 Forbidden>
+[2026-10-01T07:53:47+00:00] [warn] [skip] whois not found on PATH — skipping whois
+[2026-10-01T07:53:47+00:00] [meta] [+] 1 unique candidate hosts before resolution
+[2026-10-01T07:53:47+00:00] [warn] [skip] dnsx not found on PATH — skipping dnsx
+[2026-10-01T07:53:47+00:00] [why] [why] httpx: probes each resolved host over HTTP(S) to confirm it's actually serving a web response (status, title, tech) before other tools spend time on it.
+[2026-10-01T07:53:47+00:00] [cmd] $ /usr/local/bin/httpx -silent -json -title -tech-detect -status-code -fr -l /home/claude/surface/.scan_1_hosts.txt
+[2026-10-01T07:53:48+00:00] [out] Usage: httpx [OPTIONS] URL
+[2026-10-01T07:53:48+00:00] [out] Error: No such option: -s
+[2026-10-01T07:53:48+00:00] [meta] [done] httpx exited 2 (2 lines)
+[2026-10-01T07:53:48+00:00] [error] [httpx] this looks like a DIFFERENT program also called 'httpx' — most likely the Python httpx[cli] HTTP client, not ProjectDiscovery's recon tool (same binary name, different tool), and no working ProjectDiscovery httpx was found anywhere on PATH. Install it with `go install github.com/projectdiscovery/httpx/cmd/httpx@latest`.
+[2026-10-01T07:53:48+00:00] [warn] [skip] nmap not found on PATH — skipping nmap
+[2026-10-01T07:53:48+00:00] [warn] [internetdb] no resolved IPs to look up
+[2026-10-01T07:53:48+00:00] [meta] === scan complete ===
+
+==============================================================================
+SUMMARY
+==============================================================================
+Hosts discovered:   1
+Live HTTP assets:   0
+Open ports:         0
+Emails harvested:   0
+Intel facts:        0
+
+==============================================================================
+HOSTS & ASSETS
+==============================================================================
+- example.com  ip=-  sources=root  http=-  title=-  ports=-  confidence=not validated
